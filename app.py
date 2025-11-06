@@ -269,7 +269,6 @@ with right_col:
     # Планы
     rows = []
     for emp in md.get("employees", []):
-        # Безопасный подсчёт текущего
         cur = 0.0
         for wk in md.get("weeks", []):
             emp_profits = wk.get("daily_profits", {}).get(emp, {})
@@ -308,10 +307,15 @@ for wi, week_dates in enumerate(weeks_covering_month(md["year"], md["month"]), s
     if not week_in_month:
         continue
 
-    st.markdown(f"**Week {wi}: {week_in_month[0].strftime('%b %d')} - {week_in_month[-1].strftime('%b %d')}**")
+    # Восстановлен оригинальный вид: Mon\n11/1
+    display_days = []
+    for d in week_in_month:
+        day_abbr = calendar.day_abbr[d.weekday()]
+        display_days.append(f"{day_abbr}\\n{d.day}")
+
+    st.markdown(f"**Week {wi}: {week_dates[0].strftime('%b %d')} - {week_dates[-1].strftime('%b %d')}**")
 
     tech_days = [f"day_{i}" for i in range(len(week_in_month))]
-    display_days = [d.strftime("%a\n%-d") for d in week_in_month]
 
     header_html = "<tr><th>Employee</th>" + "".join(
         f"<th style='white-space: pre-line; text-align: center;'>{d}</th>" for d in display_days
