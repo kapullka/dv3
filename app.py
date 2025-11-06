@@ -9,7 +9,7 @@ import json
 import os
 from typing import Dict, Any, List, Tuple
 
-APP_TITLE = "🚚 Dispatch Tracker — Final"
+APP_TITLE = "🚚 SunTrans Profit"
 DATA_FILE = "dispatch_data.json"
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
@@ -398,17 +398,6 @@ for wi, week_dates in enumerate(weeks_covering_month(md["year"], md["month"]), s
             except Exception:
                 new_val = 0.0
             md["weeks"][wi - 1]["daily_profits"].setdefault(emp_name, {})[d.isoformat()] = new_val
-
-    # compute weekly totals per employee and show a compact table (Employee | Week Total | Plan | %)
-    totals = []
-    for emp in md.get("employees", []):
-        wt = sum(float(v or 0.0) for v in md["weeks"][wi - 1]["daily_profits"].get(emp, {}).values())
-        plan = md.get("employee_plans", {}).get(emp, 0.0)
-        pct = (wt / plan * 100) if plan else None
-        totals.append({"Employee": emp, "Week Total": wt, "Plan": plan, "Progress (%)": f"{pct:.1f}%" if pct is not None else ""})
-    if totals:
-        df_tot = pd.DataFrame(totals).set_index("Employee")
-        st.table(df_tot)
 
     # update week total and continue
     md["weeks"][wi - 1]["total"] = sum(float(r["Week Total"]) for r in totals)
