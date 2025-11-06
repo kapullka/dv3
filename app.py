@@ -12,7 +12,7 @@ st.title("truck Dispatch Tracker v4")
 # CSS — узкие колонки + перенос строки
 st.markdown("""
 <style>
-/* Перенос строки */
+/* Перенос строки в заголовках */
 [data-testid="stTable"] th,
 [data-testid="stTable"] td {
     white-space: pre-line !important;
@@ -23,7 +23,7 @@ st.markdown("""
     vertical-align: top !important;
 }
 
-/* Узкие колонки */
+/* Узкие колонки для дней */
 [data-testid="stTable"] th:nth-child(n+2):nth-child(-n+8),
 [data-testid="stTable"] td:nth-child(n+2):nth-child(-n+8) {
     width: 60px !important;
@@ -77,7 +77,7 @@ def get_weeks_with_dates(year, month):
                 week_days.append(f"{calendar.day_abbr[i]}\n{day.month}/{day.day}")
             else:
                 week_days.append("-\n-")
-        week_label = f"Week {len(weeks)+1} ({current.strftime('%b %d')} - {(current+timedelta(days=6)).strftime('%b %d')})"
+        week_label = f"Week {len(weeks)+1} ({current.strftime('%b %d')} - {(current + timedelta(days=6)).strftime('%b %d')})"
         weeks.append((week_label, week_days))
         current += timedelta(days=7)
     return weeks
@@ -105,12 +105,11 @@ def ensure_month_structure(month_name):
 
         # Создаём недели всегда
         for label, days in get_weeks_with_dates(year, month):
-            week_data = {
+            data[month_name]["weeks"].append({
                 "label": label,
                 "days": days,
                 "profits": {}
-            }
-            data[month_name]["weeks"].append(week_data)
+            })
 
     month_data = data[month_name]
     month_data.setdefault("weeks", [])
@@ -119,13 +118,12 @@ def ensure_month_structure(month_name):
 
     current_employees = set(month_data["employees"])
 
+    # Синхронизация profits
     for week in month_data["weeks"]:
         week.setdefault("profits", {})
-        week_employees = set(week["profits"].keys())
-
-        for emp in current_employees - week_employees:
+        for emp in current_employees - week["profits"].keys():
             week["profits"][emp] = [0] * 7
-        for emp in week_employees - current_employees:
+        for emp in list(week["profits"].keys() - current_employees):
             week["profits"].pop(emp, None)
 
     save_data(data)
@@ -152,6 +150,7 @@ with col_btn1:
         except Exception as e:
             st.error(f"Failed to add month: {e}")
 
+# ГАРАНТИРОВАННО создаём недели
 ensure_month_structure(selected_month)
 month_data = data[selected_month]
 
@@ -225,15 +224,16 @@ st.markdown(f"### Weekly Profits for {selected_month}")
 
 weeks = month_data.get("weeks", [])
 if not weeks:
-    st.warning("No weeks found. Creating now...")
+    st.warning("No weeks found. Recreating structure...")
     ensure_month_structure(selected_month)
     weeks = month_data.get("weeks", [])
     st.rerun()
 
 for week in weeks:
-    label = week.get("label", "Week")
+    label = week.get("label", "Unknown Week")
     days = week.get("days", [])
     if not days:
+        st.warning(f"Week {label} has no days. Skipping...")
         continue
 
     st.markdown(f"**{label}**")
