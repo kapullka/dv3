@@ -18,6 +18,7 @@ st.markdown("""
     line-height: 1.3 !important;
     font-size: 14px !important;
     vertical-align: top !important;
+    padding: 8px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -221,9 +222,11 @@ else:
         days = week.get("days", [f"Day {i+1}" for i in range(7)])
         st.markdown(f"**{label}**")
 
+        # Заголовки колонок — с переносом строки
+        header_cols = ["Employee"] + [f"<div style='line-height:1.2;'>{d.replace(chr(10), '<br>')}</div>" for d in days] + ["Weekly Total"]
         cols = ["Employee"] + days + ["Weekly Total"]
-        rows = []
 
+        rows = []
         for emp in month_data["employees"]:
             profits = week.get("profits", {}).get(emp, [0]*7)
             total = sum(profits)
@@ -231,13 +234,22 @@ else:
             rows.append(row)
 
         df = pd.DataFrame(rows, columns=cols)
+
+        # Применяем HTML-рендер для заголовков
         edited_df = st.data_editor(
             df,
             key=f"week_editor_{label}",
             use_container_width=True,
             hide_index=True,
+            column_config={
+                col: st.column_config.Column(
+                    col,
+                    width="medium"
+                ) for col in df.columns if col != "Employee"
+            }
         )
 
+        # Сохраняем изменения
         for _, row in edited_df.iterrows():
             emp = row["Employee"]
             if "profits" not in week:
