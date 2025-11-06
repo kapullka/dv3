@@ -68,7 +68,7 @@ def get_weeks_with_dates(year, month):
     last_day = datetime(year, month, calendar.monthrange(year, month)[1])
 
     weeks = []
-    current = first_day - timedelta(days=first_day.weekday())
+    current = first_day - timedelta(days=first_day.weekday())  # Monday
     while current <= last_day:
         week_days = []
         for i in range(7):
@@ -121,6 +121,16 @@ def ensure_month_structure(month_name):
     # Синхронизация profits
     for week in month_data["weeks"]:
         week.setdefault("profits", {})
+        week.setdefault("days", [])  # На всякий случай
+        if not week["days"]:  # Если days пустой — пересоздаём
+            try:
+                year = int(month_name.split()[-1])
+                month = list(calendar.month_name).index(month_name.split()[0])
+                _, week_days = get_weeks_with_dates(year, month)[month_data["weeks"].index(week)]
+                week["days"] = week_days
+            except:
+                pass
+
         for emp in current_employees - week["profits"].keys():
             week["profits"][emp] = [0] * 7
         for emp in list(week["profits"].keys() - current_employees):
@@ -232,9 +242,22 @@ if not weeks:
 for week in weeks:
     label = week.get("label", "Unknown Week")
     days = week.get("days", [])
+    
+    # Если days пустой — пытаемся восстановить
     if not days:
-        st.warning(f"Week {label} has no days. Skipping...")
-        continue
+        st.warning(f"{label} has no days. Regenerating...")
+        try:
+            year = int(selected_month.split()[-1])
+            month = list(calendar.month_name).index(selected_month.split()[0])
+            all_weeks = get_weeks_with_dates(year, month)
+            week_index = next((i for i, (lbl, _) in enumerate(all_weeks) if lbl == label), None)
+            if week_index is not None:
+                _, days = all_weeks[week_index]
+                week["days"] = days
+                save_data(data)
+                st.rerun()
+        except:
+            continue
 
     st.markdown(f"**{label}**")
 
