@@ -9,16 +9,23 @@ import os
 st.set_page_config(page_title="Dispatch Tracker v4", page_icon="truck", layout="wide")
 st.title("truck Dispatch Tracker v4")
 
-# CSS для красивого отображения дат
+# CSS — критически важно для переноса строки
 st.markdown("""
 <style>
-.dataframe th, .dataframe td {
-    text-align: center !important;
+/* Включаем перенос по \n */
+.css-1y0t3g0 .stDataFrame .stTable th,
+.css-1y0t3g0 .stDataFrame .stTable td {
     white-space: pre-line !important;
-    line-height: 1.3 !important;
+    text-align: center !important;
+    line-height: 1.4 !important;
     font-size: 14px !important;
-    vertical-align: top !important;
     padding: 8px !important;
+    vertical-align: top !important;
+}
+
+/* Убираем обрезку текста */
+.stDataFrame {
+    overflow: visible !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -40,18 +47,16 @@ data = load_data()
 
 # ---------------- HELPERS ---------------- #
 def get_weeks_with_dates(year, month):
-    """Return list of weeks with day numbers (Monday–Sunday) in format: Day\nMM/DD"""
     first_day = datetime(year, month, 1)
     last_day = datetime(year, month, calendar.monthrange(year, month)[1])
 
     weeks = []
-    current = first_day - timedelta(days=first_day.weekday())  # go to Monday
+    current = first_day - timedelta(days=first_day.weekday())
     while current <= last_day:
         week_days = []
         for i in range(7):
             day = current + timedelta(days=i)
             if day.month == month:
-                # Формат: Mon\n11/15
                 week_days.append(f"{calendar.day_abbr[i]}\n{day.month}/{day.day}")
             else:
                 week_days.append("-\n-")
@@ -61,7 +66,6 @@ def get_weeks_with_dates(year, month):
     return weeks
 
 def ensure_month_structure(month_name):
-    """Ensure month exists in data and has correct structure."""
     if month_name not in data:
         prev_month = list(data.keys())[-1] if data else None
         try:
@@ -94,24 +98,18 @@ def ensure_month_structure(month_name):
         return
 
     month_data = data[month_name]
-
-    if "weeks" not in month_data:
-        month_data["weeks"] = []
-    if "employees" not in month_data:
-        month_data["employees"] = []
-    if "employee_plans" not in month_data:
-        month_data["employee_plans"] = {}
+    month_data.setdefault("weeks", [])
+    month_data.setdefault("employees", [])
+    month_data.setdefault("employee_plans", {})
 
     current_employees = set(month_data["employees"])
 
     for week in month_data["weeks"]:
-        if "profits" not in week:
-            week["profits"] = {}
+        week.setdefault("profits", {})
         week_employees = set(week["profits"].keys())
 
         for emp in current_employees - week_employees:
             week["profits"][emp] = [0] * 7
-
         for emp in week_employees - current_employees:
             week["profits"].pop(emp, None)
 
@@ -126,7 +124,7 @@ if not available_months:
 
 selected_month = st.selectbox("Select Month", available_months)
 
-col_btn1, col_btn2 = st.columns([1, 4])
+col_btn1, _ = st.columns([1, 4])
 with col_btn1:
     if st.button("Add New Month"):
         try:
@@ -142,7 +140,7 @@ with col_btn1:
 ensure_month_structure(selected_month)
 month_data = data[selected_month]
 
-# ---------------- EMPLOYEES CONTROL ---------------- #
+# ---------------- EMPLOYEES ---------------- #
 st.divider()
 st.subheader("Employees")
 
@@ -154,11 +152,9 @@ with col_add:
             month_data["employees"].append(new_employee)
             month_data["employee_plans"][new_employee] = 0
             for week in month_data["weeks"]:
-                if "profits" not in week:
-                    week["profits"] = {}
                 week["profits"][new_employee] = [0]*7
             save_data(data)
-            st.success(f"Added {new_employee} to {selected_month}")
+            st.success(f"Added {new_employee}")
             st.rerun()
         elif new_employee in month_data["employees"]:
             st.warning("Employee already exists.")
@@ -178,13 +174,12 @@ with col_remove:
                         data[m]["employees"].remove(remove_name)
                         data[m]["employee_plans"].pop(remove_name, None)
                         for week in data[m].get("weeks", []):
-                            if "profits" in week:
-                                week["profits"].pop(remove_name, None)
+                            week["profits"].pop(remove_name, None)
                 save_data(data)
-                st.warning(f"{remove_name} removed from {selected_month} and later months.")
+                st.warning(f"{remove_name} removed.")
                 st.rerun()
 
-# ---------------- EMPLOYEE PLANS TABLE ---------------- #
+# ---------------- PLANS ---------------- #
 st.divider()
 st.markdown("### Employee Plans (Monthly)")
 
@@ -192,10 +187,7 @@ employee_data = []
 total_sum = 0
 for emp in month_data["employees"]:
     plan = month_data["employee_plans"].get(emp, 0)
-    total_profit = 0
-    for week in month_data.get("weeks", []):
-        profits = week.get("profits", {}).get(emp, [0]*7)
-        total_profit += sum(profits)
+    total_profit = sum(week.get("profits", {}).get(emp, [0]*7) for week in month_data.get("weeks", []))
     employee_data.append({"Employee": emp, "Plan": plan, "Total": total_profit})
     total_sum += total_profit
 
@@ -205,55 +197,48 @@ if not df_emp.empty:
     for _, row in edited_plans.iterrows():
         month_data["employee_plans"][row["Employee"]] = row["Plan"]
 else:
-    st.info("No employees yet. Add some above.")
+    st.info("No employees yet.")
 
 st.markdown(f"**Monthly Total: ${total_sum:,.2f}**")
 
-# ---------------- MAIN TABLE: WEEKLY PROFITS ---------------- #
+# ---------------- WEEKLY PROFITS ---------------- #
 st.divider()
 st.markdown(f"### Weekly Profits for {selected_month}")
 
 weeks = month_data.get("weeks", [])
 if not weeks:
-    st.info("No weeks defined for this month.")
+    st.info("No weeks defined.")
 else:
     for week in weeks:
         label = week.get("label", "Unknown Week")
         days = week.get("days", [f"Day {i+1}" for i in range(7)])
         st.markdown(f"**{label}**")
 
-        # Заголовки колонок — с переносом строки
-        header_cols = ["Employee"] + [f"<div style='line-height:1.2;'>{d.replace(chr(10), '<br>')}</div>" for d in days] + ["Weekly Total"]
         cols = ["Employee"] + days + ["Weekly Total"]
-
         rows = []
         for emp in month_data["employees"]:
             profits = week.get("profits", {}).get(emp, [0]*7)
-            total = sum(profits)
-            row = [emp] + profits + [total]
-            rows.append(row)
+            rows.append([emp] + profits + [sum(profits)])
 
         df = pd.DataFrame(rows, columns=cols)
 
-        # Применяем HTML-рендер для заголовков
+        # КЛЮЧЕВОЕ: отключаем автоматическую обрезку заголовков
         edited_df = st.data_editor(
             df,
-            key=f"week_editor_{label}",
+            key=f"week_{label}",
             use_container_width=True,
             hide_index=True,
             column_config={
                 col: st.column_config.Column(
                     col,
-                    width="medium"
-                ) for col in df.columns if col != "Employee"
+                    width="small" if col != "Employee" else "medium"
+                ) for col in df.columns
             }
         )
 
-        # Сохраняем изменения
+        # Сохраняем
         for _, row in edited_df.iterrows():
             emp = row["Employee"]
-            if "profits" not in week:
-                week["profits"] = {}
             week["profits"][emp] = [row[day] for day in days]
 
         st.markdown("---")
