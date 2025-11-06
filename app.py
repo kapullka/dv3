@@ -9,10 +9,10 @@ import os
 st.set_page_config(page_title="Dispatch Tracker v4", page_icon="truck", layout="wide")
 st.title("truck Dispatch Tracker v4")
 
-# CSS — перенос строки + узкие колонки
+# CSS — узкие колонки + перенос строки
 st.markdown("""
 <style>
-/* Перенос строки в заголовках */
+/* Перенос строки */
 [data-testid="stTable"] th,
 [data-testid="stTable"] td {
     white-space: pre-line !important;
@@ -23,7 +23,7 @@ st.markdown("""
     vertical-align: top !important;
 }
 
-/* Узкие колонки для дней */
+/* Узкие колонки */
 [data-testid="stTable"] th:nth-child(n+2):nth-child(-n+8),
 [data-testid="stTable"] td:nth-child(n+2):nth-child(-n+8) {
     width: 60px !important;
@@ -31,14 +31,14 @@ st.markdown("""
     max-width: 60px !important;
 }
 
-/* Колонка Employee — чуть шире */
+/* Employee */
 [data-testid="stTable"] th:first-child,
 [data-testid="stTable"] td:first-child {
     min-width: 100px !important;
     width: 100px !important;
 }
 
-/* Weekly Total — средняя */
+/* Weekly Total */
 [data-testid="stTable"] th:last-child,
 [data-testid="stTable"] td:last-child {
     width: 80px !important;
@@ -103,16 +103,14 @@ def ensure_month_structure(month_name):
             data[month_name]["employees"] = data[prev_month]["employees"].copy()
             data[month_name]["employee_plans"] = data[prev_month]["employee_plans"].copy()
 
+        # Генерируем недели даже если нет сотрудников
         for label, days in get_weeks_with_dates(year, month):
             week_data = {
                 "label": label,
                 "days": days,
-                "profits": {emp: [0]*7 for emp in data[month_name]["employees"]}
+                "profits": {}  # Пустой словарь — будет заполняться при добавлении сотрудников
             }
             data[month_name]["weeks"].append(week_data)
-
-    if month_name not in data:
-        return
 
     month_data = data[month_name]
     month_data.setdefault("weeks", [])
@@ -125,8 +123,10 @@ def ensure_month_structure(month_name):
         week.setdefault("profits", {})
         week_employees = set(week["profits"].keys())
 
+        # Добавляем недостающих
         for emp in current_employees - week_employees:
             week["profits"][emp] = [0] * 7
+        # Удаляем лишних
         for emp in week_employees - current_employees:
             week["profits"].pop(emp, None)
 
@@ -154,6 +154,7 @@ with col_btn1:
         except Exception as e:
             st.error(f"Failed to add month: {e}")
 
+# Обязательно вызываем — это создаёт недели
 ensure_month_structure(selected_month)
 month_data = data[selected_month]
 
@@ -168,6 +169,7 @@ with col_add:
         if new_employee and new_employee not in month_data["employees"]:
             month_data["employees"].append(new_employee)
             month_data["employee_plans"][new_employee] = 0
+            # Добавляем в каждую неделю
             for week in month_data["weeks"]:
                 week["profits"][new_employee] = [0]*7
             save_data(data)
@@ -227,34 +229,40 @@ st.markdown(f"### Weekly Profits for {selected_month}")
 
 weeks = month_data.get("weeks", [])
 if not weeks:
-    st.info("No weeks defined.")
-else:
-    for week in weeks:
-        label = week.get("label", "Unknown Week")
-        days = week.get("days", [])
-        if not days:  # Защита от пустых дней
-            continue
-        st.markdown(f"**{label}**")
+    st.warning("No weeks found. Creating now...")
+    ensure_month_structure(selected_month)  # Принудительно создаём
+    weeks = month_data.get("weeks", [])
+    st.rerun()
 
-        cols = ["Employee"] + days + ["Weekly Total"]
-        rows = []
-        for emp in month_data["employees"]:
-            profits = week.get("profits", {}).get(emp, [0]*7)
-            rows.append([emp] + profits + [sum(profits)])
+for week in weeks:
+    label = week.get("label", "Week")
+    days = week.get("days", [])
+    if not days:
+        st.warning(f"Week {label} has no days. Regenerating...")
+        continue
 
+    st.markdown(f"**{label}**")
+
+    cols = ["Employee"] + days + ["Weekly Total"]
+    rows = []
+    for emp in month_data["employees"]:
+        profits = week.get("profits", {}).get(emp, [0]*7)
+        rows.append([emp] + profits + [sum(profits)])
+
+    df = pd3
         df = pd.DataFrame(rows, columns=cols)
 
-        edited_df = st.data_editor(
-            df,
-            key=f"week_{label}",
-            use_container_width=True,
-            hide_index=True,
-        )
+    edited_df = st.data_editor(
+        df,
+        key=f"week_{label}",
+        use_container_width=True,
+        hide_index=True,
+    )
 
-        for _, row in edited_df.iterrows():
-            emp = row["Employee"]
-            week["profits"][emp] = [row[day] for day in days]
+    for _, row in edited_df.iterrows():
+        emp = row["Employee"]
+        week["profits"][emp] = [row[day] for day in days]
 
-        st.markdown("---")
+    st.markdown("---")
 
 save_data(data)
