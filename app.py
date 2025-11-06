@@ -76,7 +76,7 @@ def get_weeks_with_dates(year, month):
 
 def ensure_month_structure(month_name):
     if month_name in data:
-        return  # уже существует — ничего не делаем
+        return
     prev_month = list(data.keys())[-1] if data else None
     try:
         year = int(month_name.split()[-1])
@@ -92,12 +92,10 @@ def ensure_month_structure(month_name):
         "weeks": []
     }
 
-    # Копируем сотрудников и планы из предыдущего месяца
     if prev_month and prev_month in data:
         data[month_name]["employees"] = data[prev_month]["employees"].copy()
         data[month_name]["employee_plans"] = {k: v for k, v in data[prev_month]["employee_plans"].items()}
 
-    # Генерируем недели
     for label, days in get_weeks_with_dates(year, month):
         data[month_name]["weeks"].append({
             "label": label,
@@ -127,7 +125,6 @@ with col_btn1:
         except Exception as e:
             st.error(f"Error: {e}")
 
-# Гарантируем структуру выбранного месяца
 ensure_month_structure(selected_month)
 month_data = data[selected_month]
 
@@ -210,39 +207,53 @@ for week_idx, week in enumerate(weeks):
     display_days = week.get("days", ["-\n-"] * 7)
     tech_days = [f"day_{i}" for i in range(7)]
 
+    # --- ДАННЫЕ ---
     rows = []
     for emp in month_data["employees"]:
         profits = week["profits"].get(emp, [0] * 7)
         row = {"Employee": emp}
-        for i, p in enumerate(profits):
-            row[tech_days[i]] = p
+        for i, val in enumerate(profits):
+            row[tech_days[i]] = float(val)
         row["Weekly Total"] = sum(profits)
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    df_display = df.copy()
-    df_display.columns = ["Employee"] + display_days + ["Weekly Total"]
 
+    # --- ОТОБРАЖЕНИЕ: HTML-заголовок ---
     st.markdown(f"**{label}**")
+    header_html = "<tr><th>Employee</th>" + "".join(
+        f"<th style='white-space: pre-line; text-align: center;'>{d}</th>" for d in display_days
+    ) + "<th>Weekly Total</th></tr>"
+    st.markdown(header_html, unsafe_allow_html=True)
+
+    # --- РЕДАКТОР: только технические имена ---
     edited_df = st.data_editor(
-        df_display,
+        df,
         key=f"week_{selected_month}_{week_idx}_{label}",
         use_container_width=True,
         hide_index=True,
         column_config={
             "Weekly Total": st.column_config.NumberColumn(
-                "Weekly Total", format="$%.2f", disabled=True
+                "Weekly Total",
+                format="$%.2f",
+                disabled=True
             ),
-            **{tech_days[i]: st.column_config.NumberColumn(
-                display_days[i], format="$%.2f", min_value=0
-            ) for i in range(7)}
+            **{
+                tech_days[i]: st.column_config.NumberColumn(
+                    tech_days[i],
+                    format="$%.2f",
+                    min_value=0
+                ) for i in range(7)
+            }
         }
     )
 
+    # --- СОХРАНЕНИЕ ---
     for _, row in edited_df.iterrows():
         emp = row["Employee"]
         week["profits"][emp] = [float(row[tech_days[i]]) for i in range(7)]
 
     st.markdown("---")
 
+# Сохраняем один раз в конце
 save_data(data)
