@@ -9,12 +9,12 @@ import os
 st.set_page_config(page_title="Dispatch Tracker v4", page_icon="truck", layout="wide")
 st.title("truck Dispatch Tracker v4")
 
-# CSS — критически важно для переноса строки
+# CSS — гарантирует перенос строки в заголовках
 st.markdown("""
 <style>
-/* Включаем перенос по \n */
-.css-1y0t3g0 .stDataFrame .stTable th,
-.css-1y0t3g0 .stDataFrame .stTable td {
+/* Перенос строки в заголовках */
+[data-testid="stTable"] th,
+[data-testid="stTable"] td {
     white-space: pre-line !important;
     text-align: center !important;
     line-height: 1.4 !important;
@@ -23,8 +23,8 @@ st.markdown("""
     vertical-align: top !important;
 }
 
-/* Убираем обрезку текста */
-.stDataFrame {
+/* Убираем обрезку */
+[data-testid="stDataFrame"] {
     overflow: visible !important;
 }
 </style>
@@ -187,7 +187,10 @@ employee_data = []
 total_sum = 0
 for emp in month_data["employees"]:
     plan = month_data["employee_plans"].get(emp, 0)
-    total_profit = sum(week.get("profits", {}).get(emp, [0]*7) for week in month_data.get("weeks", []))
+    total_profit = 0
+    for week in month_data.get("weeks", []):
+        profits = week.get("profits", {}).get(emp, [0]*7)
+        total_profit += sum(profits)  # <-- ИСПРАВЛЕНО: sum() вне генератора
     employee_data.append({"Employee": emp, "Plan": plan, "Total": total_profit})
     total_sum += total_profit
 
@@ -222,21 +225,13 @@ else:
 
         df = pd.DataFrame(rows, columns=cols)
 
-        # КЛЮЧЕВОЕ: отключаем автоматическую обрезку заголовков
         edited_df = st.data_editor(
             df,
             key=f"week_{label}",
             use_container_width=True,
             hide_index=True,
-            column_config={
-                col: st.column_config.Column(
-                    col,
-                    width="small" if col != "Employee" else "medium"
-                ) for col in df.columns
-            }
         )
 
-        # Сохраняем
         for _, row in edited_df.iterrows():
             emp = row["Employee"]
             week["profits"][emp] = [row[day] for day in days]
