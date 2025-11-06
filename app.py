@@ -6,8 +6,8 @@ import json
 import os
 
 # ---------------- CONFIG ---------------- #
-st.set_page_config(page_title="Dispatch Tracker v3", page_icon="🚚", layout="wide")
-st.title("🚚 Dispatch Tracker v3")
+st.set_page_config(page_title="Dispatch Tracker v4", page_icon="🚚", layout="wide")
+st.title("🚚 Dispatch Tracker v4")
 
 DATA_FILE = "dispatch_data.json"
 
@@ -44,7 +44,7 @@ def ensure_month_structure(month_name):
         now = datetime.now()
         data[month_name] = {
             "employees": [],
-            "plan": {"Monthly Target": 0, "Notes": ""},
+            "employee_plans": {},
             "weeks": []
         }
         year = int(month_name.split()[-1])
@@ -63,8 +63,9 @@ months = list(data.keys()) or [datetime.now().strftime("%B %Y")]
 selected_month = st.selectbox("Select Month", months)
 
 if st.button("➕ Add New Month"):
-    next_month_date = datetime.strptime(months[-1], "%B %Y") + timedelta(days=31)
-    next_month_str = next_month_date.strftime("%B %Y")
+    last_month_date = datetime.strptime(months[-1], "%B %Y")
+    next_month = last_month_date.replace(day=28) + timedelta(days=4)
+    next_month_str = next_month.strftime("%B %Y")
     ensure_month_structure(next_month_str)
     save_data(data)
     st.success(f"Added new month: {next_month_str}")
@@ -82,15 +83,46 @@ with col2:
     if st.button("Add employee to month"):
         if new_employee and new_employee not in month_data["employees"]:
             month_data["employees"].append(new_employee)
+            month_data["employee_plans"][new_employee] = 0
             for week in month_data["weeks"]:
                 week["profits"][new_employee] = 0
             save_data(data)
             st.success(f"Added {new_employee} to month {selected_month}")
             st.rerun()
 
-# ---------------- WEEKS TABLE ---------------- #
+# ---------------- MONTHLY PLAN HEADER ---------------- #
+total_month = sum(week["total"] for week in month_data["weeks"])
+monthly_plan_total = sum(month_data["employee_plans"].values())
+
+header_col1, header_col2 = st.columns([3, 2])
+with header_col1:
+    st.markdown(f"### 📅 {selected_month}")
+with header_col2:
+    st.metric("🎯 Monthly Target", f"${monthly_plan_total:,.2f}")
+    st.metric("💰 Current Total", f"${total_month:,.2f}")
+
+# ---------------- EMPLOYEE PLANS TABLE ---------------- #
+if month_data["employees"]:
+    emp_data = []
+    for emp in month_data["employees"]:
+        emp_total = sum(week["profits"].get(emp, 0) for week in month_data["weeks"])
+        emp_plan = month_data["employee_plans"].get(emp, 0)
+        emp_data.append({"Employee": emp, "Plan": emp_plan, "Done": emp_total})
+
+    df_emp = pd.DataFrame(emp_data)
+    edited_emp = st.data_editor(df_emp, key="emp_plans", use_container_width=True)
+
+    # Update data
+    for _, row in edited_emp.iterrows():
+        month_data["employee_plans"][row["Employee"]] = row["Plan"]
+
+else:
+    st.info("No employees added yet.")
+
 st.divider()
-st.subheader(f"📅 Weekly Profits – {selected_month}")
+
+# ---------------- WEEKS TABLE ---------------- #
+st.subheader(f"📊 Weekly Profits – {selected_month}")
 
 for i, week in enumerate(month_data["weeks"]):
     st.markdown(f"**{week['label']}**")
@@ -118,36 +150,5 @@ for i, week in enumerate(month_data["weeks"]):
     st.markdown(f"**Weekly Total:** ${total_week:,.2f}")
     st.divider()
 
-save_data(data)
-
-# ---------------- MONTHLY SUMMARY ---------------- #
-st.subheader("📊 Monthly Plan & Summary")
-
-col1, col2 = st.columns([2, 3])
-
-with col1:
-    total_month = sum(week["total"] for week in month_data["weeks"])
-    st.metric("💰 Total Monthly Profit", f"${total_month:,.2f}")
-
-    plan_target = st.number_input(
-        "Monthly Target ($)", 
-        value=float(month_data["plan"].get("Monthly Target", 0)),
-        step=100.0
-    )
-    month_data["plan"]["Monthly Target"] = plan_target
-
-    notes = st.text_area("Notes / Goals", month_data["plan"].get("Notes", ""))
-    month_data["plan"]["Notes"] = notes
-
-    if st.button("💾 Save Monthly Plan"):
-        save_data(data)
-        st.success("Monthly plan saved successfully!")
-
-with col2:
-    st.markdown("### 👤 Employees List")
-    if month_data["employees"]:
-        st.table(pd.DataFrame(month_data["employees"], columns=["Employee"]))
-    else:
-        st.info("No employees added yet.")
-
+# ---------------- SAVE ---------------- #
 save_data(data)
