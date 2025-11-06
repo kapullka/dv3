@@ -207,49 +207,42 @@ if not weeks:
 
 for week_idx, week in enumerate(weeks):
     label = week.get("label", f"Week {week_idx + 1}")
-    days = week.get("days", ["-\n-"] * 7)
+    display_days = week.get("days", ["-\n-"] * 7)
+    tech_days = [f"day_{i}" for i in range(7)]
 
-    # Подготовка DataFrame с красивыми колонками
-    columns = ["Employee"] + days + ["Weekly Total"]
     rows = []
     for emp in month_data["employees"]:
         profits = week["profits"].get(emp, [0] * 7)
-        weekly_sum = sum(profits)
-        rows.append([emp] + profits + [weekly_sum])
+        row = {"Employee": emp}
+        for i, p in enumerate(profits):
+            row[tech_days[i]] = p
+        row["Weekly Total"] = sum(profits)
+        rows.append(row)
 
-    df = pd.DataFrame(rows, columns=columns)
+    df = pd.DataFrame(rows)
+    df_display = df.copy()
+    df_display.columns = ["Employee"] + display_days + ["Weekly Total"]
 
     st.markdown(f"**{label}**")
     edited_df = st.data_editor(
-        df,
+        df_display,
         key=f"week_{selected_month}_{week_idx}_{label}",
         use_container_width=True,
         hide_index=True,
         column_config={
             "Weekly Total": st.column_config.NumberColumn(
-                "Weekly Total",
-                format="$%.2f",
-                disabled=True
+                "Weekly Total", format="$%.2f", disabled=True
             ),
-            **{
-                day: st.column_config.NumberColumn(
-                    day.split("\n")[0],  # короткое имя для конфига
-                    format="$%.2f",
-                    min_value=0  # запрет отрицательных
-                ) for day in days
-            }
+            **{tech_days[i]: st.column_config.NumberColumn(
+                display_days[i], format="$%.2f", min_value=0
+            ) for i in range(7)}
         }
     )
 
-    # Сохраняем изменения
     for _, row in edited_df.iterrows():
         emp = row["Employee"]
-        week["profits"][emp] = [
-            float(row[days[i]] if i < len(days) else 0)
-            for i in range(7)
-        ]
+        week["profits"][emp] = [float(row[tech_days[i]]) for i in range(7)]
 
     st.markdown("---")
 
-# Сохраняем всё один раз в конце
 save_data(data)
