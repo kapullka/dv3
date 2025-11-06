@@ -12,20 +12,26 @@ APP_TITLE = "Dispatch Tracker — Final"
 DATA_FILE = "dispatch_data.json"
 
 # --- ЗАЩИТА: Только ты можешь редактировать ---
-# Замени 'твой_секретный_код' на любой пароль (например, "boss2025")
-ADMIN_PASSWORD = "boss2025"
+ADMIN_PASSWORD = "boss2025"  # Смени на свой
 
 def check_admin():
     if "is_admin" not in st.session_state:
         st.session_state.is_admin = False
+    
     if not st.session_state.is_admin:
-        password = st.sidebar.text_input("Admin password:", type="password")
+        # Уникальный ключ для поля ввода
+        password = st.sidebar.text_input(
+            "Admin password:", 
+            type="password", 
+            key="admin_password_input_unique"
+        )
         if password == ADMIN_PASSWORD:
             st.session_state.is_admin = True
             st.sidebar.success("Доступ разрешён")
             st.rerun()
         else:
-            st.sidebar.warning("Только владелец может редактировать")
+            if password:  # не пусто — ошибка
+                st.sidebar.error("Неверный пароль")
             return False
     return True
 
@@ -217,12 +223,12 @@ if not month_keys:
 
 col_left, col_right = st.columns([2, 1])
 with col_left:
-    selected_month = st.selectbox("Select month", month_keys, index=0, key="month_select")
+    selected_month = st.selectbox("Select month", month_keys, index=0, key="month_select_unique")
 
-# --- Только админ может добавлять месяц ---
+# --- Только админ: Add New Month ---
 if check_admin():
     with col_right:
-        if st.button("Add New Month"):
+        if st.button("Add New Month", key="add_month_admin"):
             newest_key = max(month_keys, key=lambda k: month_sort_key(k, data))
             ny, nm = parse_month_key(newest_key)
             newest_dt = date(ny, nm, 1)
@@ -271,16 +277,16 @@ _, right_col = st.columns([3, 1])
 with right_col:
     st.markdown("### Employee list")
 
-    # --- Только админ может добавлять/удалять сотрудников ---
+    # --- Только админ: Add/Remove сотрудника ---
     if check_admin():
-        with st.form("add_remove_form", clear_on_submit=False):
-            new_emp = st.text_input("New employee", key="new_emp")
+        with st.form("add_remove_form_unique", clear_on_submit=False):
+            new_emp = st.text_input("New employee", key="new_emp_input")
             col_a, col_b = st.columns(2)
             with col_a:
-                add_btn = st.form_submit_button("Add")
+                add_btn = st.form_submit_button("Add", key="add_emp_admin")
             with col_b:
-                remove_select = st.selectbox("Remove", [""] + md.get("employees", []), key="remove_emp")
-                remove_btn = st.form_submit_button("Remove")
+                remove_select = st.selectbox("Remove", [""] + md.get("employees", []), key="remove_select_unique")
+                remove_btn = st.form_submit_button("Remove", key="remove_emp_admin")
             if add_btn and new_emp.strip():
                 add_employee_to_month_and_future(data, selected_month, new_emp.strip())
                 st.success(f"Added '{new_emp.strip()}'")
@@ -292,7 +298,7 @@ with right_col:
     else:
         st.info("Только владелец может добавлять/удалять")
 
-    # Планы (все могут видеть, только админ редактировать)
+    # Планы
     rows = []
     for emp in md.get("employees", []):
         cur = 0.0
@@ -304,11 +310,11 @@ with right_col:
     if rows:
         df_emps = pd.DataFrame(rows).set_index("Employee")
         if check_admin():
-            edited = st.data_editor(df_emps[["Plan"]], key=f"plans_{selected_month}", use_container_width=True, num_rows="fixed")
+            edited = st.data_editor(df_emps[["Plan"]], key=f"plans_admin_{selected_month}", use_container_width=True, num_rows="fixed")
             for emp_name in edited.index:
                 md["employee_plans"][emp_name] = float(edited.loc[emp_name, "Plan"])
         else:
-            st.data_editor(df_emps[["Plan"]], disabled=True, use_container_width=True, num_rows="fixed")
+            st.data_editor(df_emps[["Plan"]], disabled=True, use_container_width=True, num_rows="fixed", key=f"plans_view_{selected_month}")
         st.markdown("**Current**")
         st.table(df_emps[["Current"]].style.format("${:,.0f}"))
     else:
@@ -360,10 +366,9 @@ for wi, week_dates in enumerate(weeks_covering_month(md["year"], md["month"]), s
 
     df = pd.DataFrame(rows)
 
-    # Все могут редактировать цифры, но только админ — структуру
     edited = st.data_editor(
         df,
-        key=f"week_{selected_month}_{wi}",
+        key=f"week_edit_{selected_month}_{wi}",
         use_container_width=True,
         hide_index=True,
         column_config={
