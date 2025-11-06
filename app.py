@@ -68,7 +68,7 @@ def get_weeks_with_dates(year, month):
     last_day = datetime(year, month, calendar.monthrange(year, month)[1])
 
     weeks = []
-    current = first_day - timedelta(days=first_day.weekday())  # Monday
+    current = first_day - timedelta(days=first_day.weekday())
     while current <= last_day:
         week_days = []
         for i in range(7):
@@ -257,8 +257,20 @@ for week in weeks:
         except:
             continue
 
-    # КРИТИЧЕСКАЯ ЗАЩИТА: Убираем переносы из имён колонок
-    safe_days = [d.replace("\n", " ") for d in days]
+    # --- ФИНАЛЬНОЕ РЕШЕНИЕ: Дубликаты колонок ---
+    # Проверяем, нет ли дубликатов в заголовках
+    seen = set()
+    safe_days = []
+    for d in days:
+        base = d.replace("\n", " ")
+        suffix = 0
+        candidate = base
+        while candidate in seen:
+            suffix += 1
+            candidate = f"{base}_{suffix}"
+        seen.add(candidate)
+        safe_days.append(candidate)
+
     cols = ["Employee"] + safe_days + ["Weekly Total"]
 
     rows = []
@@ -268,7 +280,7 @@ for week in weeks:
 
     df = pd.DataFrame(rows, columns=cols)
 
-    # Используем оригинальные days с \n только в отображении
+    # Отображаем с оригинальными days (но только в заголовке через HTML)
     edited_df = st.data_editor(
         df,
         key=f"week_{label}",
@@ -276,10 +288,11 @@ for week in weeks:
         hide_index=True,
     )
 
-    # Сохраняем по оригинальным days (с \n)
-    for _, row in edited_df.iterrows():
-        emp = row["Employee"]
-        week["profits"][emp] = [row[safe_d] for safe_d in safe_days]
+    # Сохраняем по индексам (не по именам)
+    day_values = [row[col] for col in safe_days]
+    for i, row in enumerate(edited_df.iterrows()):
+        emp = row[1]["Employee"]
+        week["profits"][emp] = day_values[i * len(safe_days):(i + 1) * len(safe_days)]
 
     st.markdown("---")
 
