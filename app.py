@@ -9,7 +9,7 @@ import os
 st.set_page_config(page_title="Dispatch Tracker v4", page_icon="truck", layout="wide")
 st.title("truck Dispatch Tracker v4")
 
-# CSS — гарантирует перенос строки в заголовках
+# CSS — перенос строки + узкие колонки
 st.markdown("""
 <style>
 /* Перенос строки в заголовках */
@@ -18,14 +18,31 @@ st.markdown("""
     white-space: pre-line !important;
     text-align: center !important;
     line-height: 1.4 !important;
-    font-size: 14px !important;
-    padding: 8px !important;
+    font-size: 13px !important;
+    padding: 6px 4px !important;
     vertical-align: top !important;
 }
 
-/* Убираем обрезку */
-[data-testid="stDataFrame"] {
-    overflow: visible !important;
+/* Узкие колонки для дней */
+[data-testid="stTable"] th:nth-child(n+2):nth-child(-n+8),
+[data-testid="stTable"] td:nth-child(n+2):nth-child(-n+8) {
+    width: 60px !important;
+    min-width: 60px !important;
+    max-width: 60px !important;
+}
+
+/* Колонка Employee — чуть шире */
+[data-testid="stTable"] th:first-child,
+[data-testid="stTable"] td:first-child {
+    min-width: 100px !important;
+    width: 100px !important;
+}
+
+/* Weekly Total — средняя */
+[data-testid="stTable"] th:last-child,
+[data-testid="stTable"] td:last-child {
+    width: 80px !important;
+    min-width: 80px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -190,7 +207,7 @@ for emp in month_data["employees"]:
     total_profit = 0
     for week in month_data.get("weeks", []):
         profits = week.get("profits", {}).get(emp, [0]*7)
-        total_profit += sum(profits)  # <-- ИСПРАВЛЕНО: sum() вне генератора
+        total_profit += sum(profits)
     employee_data.append({"Employee": emp, "Plan": plan, "Total": total_profit})
     total_sum += total_profit
 
@@ -214,7 +231,9 @@ if not weeks:
 else:
     for week in weeks:
         label = week.get("label", "Unknown Week")
-        days = week.get("days", [f"Day {i+1}" for i in range(7)])
+        days = week.get("days", [])
+        if not days:  # Защита от пустых дней
+            continue
         st.markdown(f"**{label}**")
 
         cols = ["Employee"] + days + ["Weekly Total"]
