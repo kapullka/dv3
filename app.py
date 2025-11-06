@@ -103,7 +103,6 @@ def ensure_month_structure(month_name):
             data[month_name]["employees"] = data[prev_month]["employees"].copy()
             data[month_name]["employee_plans"] = data[prev_month]["employee_plans"].copy()
 
-        # Создаём недели всегда
         for label, days in get_weeks_with_dates(year, month):
             data[month_name]["weeks"].append({
                 "label": label,
@@ -118,16 +117,18 @@ def ensure_month_structure(month_name):
 
     current_employees = set(month_data["employees"])
 
-    # Синхронизация profits
     for week in month_data["weeks"]:
         week.setdefault("profits", {})
-        week.setdefault("days", [])  # На всякий случай
-        if not week["days"]:  # Если days пустой — пересоздаём
+        week.setdefault("days", [])
+        if not week["days"]:
             try:
                 year = int(month_name.split()[-1])
                 month = list(calendar.month_name).index(month_name.split()[0])
-                _, week_days = get_weeks_with_dates(year, month)[month_data["weeks"].index(week)]
-                week["days"] = week_days
+                all_weeks = get_weeks_with_dates(year, month)
+                week_index = next((i for i, (lbl, _) in enumerate(all_weeks) if lbl == week["label"]), None)
+                if week_index is not None:
+                    _, days = all_weeks[week_index]
+                    week["days"] = days
             except:
                 pass
 
@@ -160,7 +161,6 @@ with col_btn1:
         except Exception as e:
             st.error(f"Failed to add month: {e}")
 
-# ГАРАНТИРОВАННО создаём недели
 ensure_month_structure(selected_month)
 month_data = data[selected_month]
 
@@ -234,7 +234,7 @@ st.markdown(f"### Weekly Profits for {selected_month}")
 
 weeks = month_data.get("weeks", [])
 if not weeks:
-    st.warning("No weeks found. Recreating structure...")
+    st.warning("No weeks found. Recreating...")
     ensure_month_structure(selected_month)
     weeks = month_data.get("weeks", [])
     st.rerun()
@@ -243,9 +243,7 @@ for week in weeks:
     label = week.get("label", "Unknown Week")
     days = week.get("days", [])
     
-    # Если days пустой — пытаемся восстановить
     if not days:
-        st.warning(f"{label} has no days. Regenerating...")
         try:
             year = int(selected_month.split()[-1])
             month = list(calendar.month_name).index(selected_month.split()[0])
@@ -259,9 +257,10 @@ for week in weeks:
         except:
             continue
 
-    st.markdown(f"**{label}**")
+    # КРИТИЧЕСКАЯ ЗАЩИТА: Убираем переносы из имён колонок
+    safe_days = [d.replace("\n", " ") for d in days]
+    cols = ["Employee"] + safe_days + ["Weekly Total"]
 
-    cols = ["Employee"] + days + ["Weekly Total"]
     rows = []
     for emp in month_data["employees"]:
         profits = week.get("profits", {}).get(emp, [0]*7)
@@ -269,6 +268,7 @@ for week in weeks:
 
     df = pd.DataFrame(rows, columns=cols)
 
+    # Используем оригинальные days с \n только в отображении
     edited_df = st.data_editor(
         df,
         key=f"week_{label}",
@@ -276,9 +276,10 @@ for week in weeks:
         hide_index=True,
     )
 
+    # Сохраняем по оригинальным days (с \n)
     for _, row in edited_df.iterrows():
         emp = row["Employee"]
-        week["profits"][emp] = [row[day] for day in days]
+        week["profits"][emp] = [row[safe_d] for safe_d in safe_days]
 
     st.markdown("---")
 
