@@ -337,7 +337,7 @@ data[selected_month] = md
 save_data(data)
 
 st.markdown("---")
-st.header(f"📅 {selected_month} — Weeks (rows = employees; columns = days Mon..Sun)")
+st.header(f"📅 {selected_month}")
 
 # -------------------- Main area: weeks vertical list --------------------
 # For each week, render editable table with employees rows and day columns (only days inside month)
