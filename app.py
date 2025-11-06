@@ -103,12 +103,12 @@ def ensure_month_structure(month_name):
             data[month_name]["employees"] = data[prev_month]["employees"].copy()
             data[month_name]["employee_plans"] = data[prev_month]["employee_plans"].copy()
 
-        # Генерируем недели даже если нет сотрудников
+        # Создаём недели всегда
         for label, days in get_weeks_with_dates(year, month):
             week_data = {
                 "label": label,
                 "days": days,
-                "profits": {}  # Пустой словарь — будет заполняться при добавлении сотрудников
+                "profits": {}
             }
             data[month_name]["weeks"].append(week_data)
 
@@ -123,10 +123,8 @@ def ensure_month_structure(month_name):
         week.setdefault("profits", {})
         week_employees = set(week["profits"].keys())
 
-        # Добавляем недостающих
         for emp in current_employees - week_employees:
             week["profits"][emp] = [0] * 7
-        # Удаляем лишних
         for emp in week_employees - current_employees:
             week["profits"].pop(emp, None)
 
@@ -154,7 +152,6 @@ with col_btn1:
         except Exception as e:
             st.error(f"Failed to add month: {e}")
 
-# Обязательно вызываем — это создаёт недели
 ensure_month_structure(selected_month)
 month_data = data[selected_month]
 
@@ -169,7 +166,6 @@ with col_add:
         if new_employee and new_employee not in month_data["employees"]:
             month_data["employees"].append(new_employee)
             month_data["employee_plans"][new_employee] = 0
-            # Добавляем в каждую неделю
             for week in month_data["weeks"]:
                 week["profits"][new_employee] = [0]*7
             save_data(data)
@@ -230,7 +226,7 @@ st.markdown(f"### Weekly Profits for {selected_month}")
 weeks = month_data.get("weeks", [])
 if not weeks:
     st.warning("No weeks found. Creating now...")
-    ensure_month_structure(selected_month)  # Принудительно создаём
+    ensure_month_structure(selected_month)
     weeks = month_data.get("weeks", [])
     st.rerun()
 
@@ -238,7 +234,6 @@ for week in weeks:
     label = week.get("label", "Week")
     days = week.get("days", [])
     if not days:
-        st.warning(f"Week {label} has no days. Regenerating...")
         continue
 
     st.markdown(f"**{label}**")
@@ -249,8 +244,7 @@ for week in weeks:
         profits = week.get("profits", {}).get(emp, [0]*7)
         rows.append([emp] + profits + [sum(profits)])
 
-    df = pd3
-        df = pd.DataFrame(rows, columns=cols)
+    df = pd.DataFrame(rows, columns=cols)
 
     edited_df = st.data_editor(
         df,
