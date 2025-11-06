@@ -403,20 +403,6 @@ for wi, week_dates in enumerate(weeks_covering_month(md["year"], md["month"]), s
     data[selected_month] = md
     save_data(data)
 
-# end: show final monthly summary (redundant with right panel but useful)
-st.markdown("## Monthly summary")
-tot_planned = sum(float(v or 0.0) for v in md.get("employee_plans", {}).values())
-tot_current = 0.0
-for wk in md.get("weeks", []):
-    for emp in md.get("employees", []):
-        tot_current += sum(float(x or 0.0) for x in wk.get("daily_profits", {}).get(emp, {}).values())
-col_a, col_b = st.columns([2, 3])
-with col_a:
-    st.metric("🎯 Month Plan Total", f"${tot_planned:,.2f}")
-    st.metric("💰 Month Current Total", f"${tot_current:,.2f}")
-with col_b:
-    st.write("Employee plans are editable in the right panel above.")
-
 # persist final data
 data[selected_month] = md
 save_data(data)
