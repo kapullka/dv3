@@ -49,7 +49,6 @@ def ensure_month_structure(month_name):
     """Ensure month exists in data and has correct structure."""
     if month_name not in data:
         prev_month = list(data.keys())[-1] if data else None
-        now = datetime.now()
         year = int(month_name.split()[-1])
         month = list(calendar.month_name).index(month_name.split()[0])
 
@@ -71,7 +70,20 @@ def ensure_month_structure(month_name):
                 "profits": {emp: [0]*7 for emp in data[month_name]["employees"]}
             }
             data[month_name]["weeks"].append(week_data)
-        save_data(data)
+
+    # === СИНХРОНИЗАЦИЯ: даже если месяц уже существует ===
+    month_data = data[month_name]
+    current_employees = set(month_data["employees"])
+    for week in month_data["weeks"]:
+        week_employees = set(week["profits"].keys())
+        # Добавить недостающих сотрудников
+        for emp in current_employees - week_employees:
+            week["profits"][emp] = [0] * 7
+        # Удалить лишних (на случай ручного редактирования)
+        for emp in week_employees - current_employees:
+            week["profits"].pop(emp, None)
+
+    save_data(data)
 
 # ---------------- UI ---------------- #
 months = list(data.keys()) or [datetime.now().strftime("%B %Y")]
@@ -134,8 +146,8 @@ for emp in month_data["employees"]:
     plan = month_data["employee_plans"].get(emp, 0)
     total_profit = 0
     for week in month_data["weeks"]:
-        if emp in week["profits"]:
-            total_profit += sum(week["profits"][emp])
+        profits = week["profits"].get(emp, [0]*7)  # <-- безопасный доступ
+        total_profit += sum(profits)
     employee_data.append({"Employee": emp, "Plan": plan, "Total": total_profit})
     total_sum += total_profit
 
@@ -158,7 +170,7 @@ for week in month_data["weeks"]:
 
     rows = []
     for emp in month_data["employees"]:
-        profits = week["profits"].get(emp, [0]*7)
+        profits = week["profits"].get(emp, [0]*7)  # <-- безопасный доступ
         total = sum(profits)
         row = [emp] + profits + [total]
         rows.append(row)
