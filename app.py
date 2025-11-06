@@ -1,5 +1,4 @@
-# app.py — Streamlit Employee Management with Admin Access & Fixed Right Panel
-
+# app.py — Final version with fixed Employee Panel and admin control
 import streamlit as st
 import pandas as pd
 import calendar
@@ -10,7 +9,7 @@ from typing import Dict, Any, List, Tuple
 
 APP_TITLE = "🚚 SunTrans Profit"
 DATA_FILE = "dispatch_data.json"
-ADMIN_PASSWORD = "mysecret"  # Ставишь свой пароль
+ADMIN_PASSWORD = "1234"  # установи свой пароль
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 st.title(APP_TITLE)
@@ -45,7 +44,7 @@ def month_sort_key(k: str, data: Dict[str, Any]) -> Tuple[int, int]:
         return (y, m)
     return parse_month_key(k)
 
-# -------------------- Load & Normalize Data --------------------
+# -------------------- Load & normalize data --------------------
 def load_data() -> Dict[str, Any]:
     if os.path.exists(DATA_FILE):
         try:
@@ -58,7 +57,6 @@ def load_data() -> Dict[str, Any]:
         raw = {}
 
     data: Dict[str, Any] = {}
-
     for key, val in raw.items():
         md = dict(val) if isinstance(val, dict) else {}
         if "year" not in md or "month" not in md:
@@ -71,22 +69,23 @@ def load_data() -> Dict[str, Any]:
         expected = weeks_covering_month(md["year"], md["month"])
         old_weeks = md.get("weeks", [])
         new_weeks = []
-
         for week_dates in expected:
-            start, end = week_dates[0], week_dates[-1]
+            start = week_dates[0]; end = week_dates[-1]
             label = f"{start.strftime('%b %d')} - {end.strftime('%b %d')}"
-            old_week = next((ow for ow in old_weeks if ow.get("label") == label), None)
-            wk = {"label": label, "daily_profits": {}, "total": 0.0}
+            old_week = next((ow for ow in old_weeks if isinstance(ow, dict) and ow.get("label") == label), None)
+            week_obj = {"label": label, "daily_profits": {}, "total": 0.0}
             for emp in md.get("employees", []):
-                wk["daily_profits"][emp] = {}
+                week_obj["daily_profits"].setdefault(emp, {})
                 for d in week_dates:
                     iso = d.isoformat()
                     if old_week and emp in old_week.get("daily_profits", {}):
-                        wk["daily_profits"][emp][iso] = float(old_week["daily_profits"][emp].get(iso, 0.0) or 0.0)
+                        week_obj["daily_profits"][emp][iso] = float(old_week["daily_profits"][emp].get(iso, 0.0) or 0.0)
                     else:
-                        wk["daily_profits"][emp][iso] = 0.0
-            new_weeks.append(wk)
+                        week_obj["daily_profits"][emp][iso] = 0.0
+            new_weeks.append(week_obj)
         md["weeks"] = new_weeks
+        for emp in md["employees"]:
+            md["employee_plans"].setdefault(emp, 0.0)
         data[key] = md
 
     if not data:
@@ -94,7 +93,7 @@ def load_data() -> Dict[str, Any]:
         key = t.strftime("%B %Y")
         data[key] = {"year": t.year, "month": t.month, "employees": [], "employee_plans": {}, "weeks": []}
         for week_dates in weeks_covering_month(t.year, t.month):
-            start, end = week_dates[0], week_dates[-1]
+            start = week_dates[0]; end = week_dates[-1]
             label = f"{start.strftime('%b %d')} - {end.strftime('%b %d')}"
             data[key]["weeks"].append({"label": label, "daily_profits": {}, "total": 0.0})
     return data
@@ -103,23 +102,37 @@ def save_data(data: Dict[str, Any]):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# -------------------- Employee Ops --------------------
+# -------------------- Add / Remove employees --------------------
 def add_employee_to_month_and_future(data: Dict[str, Any], month_key: str, name: str):
     sy, sm = parse_month_key(month_key)
     for k, md in data.items():
         y, m = md.get("year", sy), md.get("month", sm)
-        if (y, m) >= (sy, sm):
-            if name not in md["employees"]:
-                md["employees"].append(name)
-                md.setdefault("employee_plans", {})[name] = 0.0
-                for idx, week_dates in enumerate(weeks_covering_month(md["year"], md["month"])):
-                    if len(md.get("weeks", [])) < idx+1:
-                        md["weeks"].append({"label": "", "daily_profits": {}, "total": 0.0})
-                    wk = md["weeks"][idx]
-                    wk.setdefault("daily_profits", {})
-                    wk["daily_profits"].setdefault(name, {})
-                    for d in week_dates:
-                        wk["daily_profits"][name].setdefault(d.isoformat(), 0.0)
+        if (y, m) >= (sy, sm) and name not in md["employees"]:
+            md["employees"].append(name)
+            md.setdefault("employee_plans", {})[name] = 0.0
+            expected_weeks = weeks_covering_month(md["year"], md["month"])
+            if len(md.get("weeks", [])) != len(expected_weeks):
+                old_weeks = md.get("weeks", [])
+                new_weeks = []
+                for idx, week_dates in enumerate(expected_weeks):
+                    start = week_dates[0]; end = week_dates[-1]
+                    label = f"{start.strftime('%b %d')} - {end.strftime('%b %d')}"
+                    old_week = next((ow for ow in old_weeks if isinstance(ow, dict) and ow.get("label") == label), None)
+                    wk = {"label": label, "daily_profits": {}, "total": 0.0}
+                    for emp2 in md["employees"]:
+                        wk["daily_profits"].setdefault(emp2, {})
+                        for d in week_dates:
+                            iso = d.isoformat()
+                            if old_week and emp2 in old_week.get("daily_profits", {}):
+                                wk["daily_profits"][emp2][iso] = float(old_week["daily_profits"][emp2].get(iso, 0.0) or 0.0)
+                            else:
+                                wk["daily_profits"][emp2][iso] = 0.0
+                    new_weeks.append(wk)
+                md["weeks"] = new_weeks
+            else:
+                for idx, wk in enumerate(md.get("weeks", [])):
+                    week_dates = weeks_covering_month(md["year"], md["month"])[idx]
+                    wk.setdefault("daily_profits", {})[name] = {d.isoformat(): 0.0 for d in week_dates}
     save_data(data)
 
 def remove_employee_from_month_and_future(data: Dict[str, Any], month_key: str, name: str):
@@ -134,10 +147,11 @@ def remove_employee_from_month_and_future(data: Dict[str, Any], month_key: str, 
                 wk.get("daily_profits", {}).pop(name, None)
     save_data(data)
 
-# -------------------- Initialize Data --------------------
+# -------------------- Initialize data --------------------
 data = load_data()
 save_data(data)
 
+# ---------- Month selection ----------
 month_keys = sorted(list(data.keys()), key=lambda k: month_sort_key(k, data), reverse=True)
 if not month_keys:
     t = date.today()
@@ -146,26 +160,63 @@ if not month_keys:
     month_keys = [key]
     save_data(data)
 
-# ---------- Layout: Columns ----------
-col_main, col_right = st.columns([3, 1], gap="large")
-
+col_main, col_right = st.columns([3, 1])
 with col_main:
     selected_month = st.selectbox("Select month", month_keys, index=0)
+md = data[selected_month]
 
+# -------------------- Main area: Weeks --------------------
+for wi, week_dates in enumerate(weeks_covering_month(md["year"], md["month"]), start=1):
+    week_in_month = [d for d in week_dates if d.month == md["month"]]
+    if not week_in_month:
+        continue
+    week_label = f"Week {wi}: {week_in_month[0].strftime('%b %d')} - {week_in_month[-1].strftime('%b %d')}"
+    st.subheader(week_label)
+
+    col_labels = [d.strftime("%a %b %d").replace(" 0"," ") for d in week_in_month]
+
+    wk_obj = md["weeks"][wi - 1]
+    wk_obj.setdefault("daily_profits", {})
+    for emp in md.get("employees", []):
+        wk_obj["daily_profits"].setdefault(emp, {})
+        for d in week_in_month:
+            wk_obj["daily_profits"][emp].setdefault(d.isoformat(), 0.0)
+
+    rows = []
+    for emp in md.get("employees", []):
+        row = {"Employee": emp}
+        for d in week_in_month:
+            iso = d.isoformat()
+            row[d.strftime("%a %b %d").replace(" 0"," ")] = float(wk_obj["daily_profits"].get(emp, {}).get(iso, 0.0) or 0.0)
+        rows.append(row)
+
+    df_week = pd.DataFrame(rows).set_index("Employee")
+    editor_key = f"week_editor_{selected_month}_{wi}"
+    edited = st.data_editor(df_week, key=editor_key, use_container_width=False, width=700, num_rows="fixed")
+
+    for emp_name in edited.index:
+        for idx, d in enumerate(week_in_month):
+            col_label = edited.columns[idx]
+            try:
+                new_val = float(edited.loc[emp_name, col_label])
+            except Exception:
+                new_val = 0.0
+            wk_obj["daily_profits"].setdefault(emp_name, {})[d.isoformat()] = new_val
+
+    data[selected_month] = md
+    save_data(data)
+
+# -------------------- Right panel: Employee Panel --------------------
 with col_right:
     st.markdown("### 👥 Employee Panel")
     entered_pass = st.text_input("Admin password", type="password")
     is_admin = entered_pass == ADMIN_PASSWORD
 
-    if not is_admin:
-        st.warning("⚠️ Only admin can add/remove employees or months.")
-
     if is_admin:
-        # Add / Remove employee
         with st.form("add_remove_employee_form", clear_on_submit=False):
             new_emp = st.text_input("New employee name")
             add_sub = st.form_submit_button("➕ Add employee")
-            remove_select = st.selectbox("Remove employee", options=["(select)"] + data[selected_month].get("employees", []))
+            remove_select = st.selectbox("Remove employee", options=["(select)"] + md.get("employees", []))
             remove_sub = st.form_submit_button("🗑 Remove selected")
             if add_sub and new_emp.strip():
                 add_employee_to_month_and_future(data, selected_month, new_emp.strip())
@@ -176,7 +227,6 @@ with col_right:
                 st.success(f"Removed employee '{remove_select}' from {selected_month} and future months.")
                 st.experimental_rerun()
 
-        # Add new month
         if st.button("➕ Add New Month"):
             newest_key = max(month_keys, key=lambda k: month_sort_key(k, data))
             ny, nm = parse_month_key(newest_key)
@@ -185,9 +235,14 @@ with col_right:
             nxt_key = nxt.strftime("%B %Y")
             if nxt_key not in data:
                 src = data[newest_key]
-                data[nxt_key] = {"year": nxt.year, "month": nxt.month, "employees": list(src.get("employees", [])), "employee_plans": dict(src.get("employee_plans", {})), "weeks": []}
+                data[nxt_key] = {
+                    "year": nxt.year, "month": nxt.month,
+                    "employees": list(src.get("employees", [])),
+                    "employee_plans": dict(src.get("employee_plans", {})),
+                    "weeks": []
+                }
                 for week_dates in weeks_covering_month(nxt.year, nxt.month):
-                    wk = {"label": f"{week_dates[0].strftime('%b %d')} - {week_dates[-1].strftime('%b %d')}", "daily_profits": {},"total":0.0}
+                    wk = {"label": f"{week_dates[0].strftime('%b %d')} - {week_dates[-1].strftime('%b %d')}", "daily_profits": {}, "total":0.0}
                     for emp in data[nxt_key]["employees"]:
                         wk["daily_profits"][emp] = {d.isoformat(): 0.0 for d in week_dates}
                     data[nxt_key]["weeks"].append(wk)
@@ -195,62 +250,26 @@ with col_right:
                 st.success(f"Created new month {nxt_key}")
                 st.experimental_rerun()
 
-# -------------------- Right panel: Plans --------------------
-md = data[selected_month]
-rows = []
-for emp in md.get("employees", []):
-    cur = sum(sum(wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md.get("weeks", []))
-    plan_val = md.get("employee_plans", {}).get(emp, 0.0)
-    rows.append({"Employee": emp, "Plan": float(plan_val), "Current": float(cur)})
+    # Employee list & totals — visible всем
+    rows = []
+    for emp in md.get("employees", []):
+        cur_total = sum(sum(wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md.get("weeks", []))
+        plan_val = md.get("employee_plans", {}).get(emp, 0.0)
+        rows.append({"Employee": emp, "Plan": float(plan_val), "Current": float(cur_total)})
 
-if rows:
-    df_emps = pd.DataFrame(rows).set_index("Employee")
-    edited = st.data_editor(df_emps[["Plan"]], key=f"emp_plans_editor_{selected_month}", use_container_width=True, num_rows="fixed")
-    for emp_name in edited.index:
-        md.setdefault("employee_plans", {})[emp_name] = float(edited.loc[emp_name, "Plan"])
-    st.markdown("**Current totals**")
-    st.table(df_emps[["Current"]])
-
-total_planned = sum(float(x or 0.0) for x in md.get("employee_plans", {}).values())
-total_current = sum(sum(wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md.get("weeks", []) for emp in md.get("employees", []))
-st.markdown("---")
-st.metric("🎯 Month Plan Total", f"${total_planned:,.2f}")
-st.metric("💰 Month Current Total", f"${total_current:,.2f}")
-data[selected_month] = md
-save_data(data)
-
-# -------------------- Main: Weeks --------------------
-with col_main:
-    st.markdown("---")
-    st.header(f"📅 {selected_month}")
-
-    for wi, week_dates in enumerate(weeks_covering_month(md["year"], md["month"]), start=1):
-        week_in_month = [d for d in week_dates if d.month == md["month"]]
-        if not week_in_month:
-            continue
-        week_label = f"Week {wi}: {week_in_month[0].strftime('%b %d')} - {week_in_month[-1].strftime('%b %d')}"
-        st.subheader(week_label)
-
-        rows = []
-        for emp in md.get("employees", []):
-            row = {"Employee": emp}
-            for d in week_in_month:
-                iso = d.isoformat()
-                val = float(md["weeks"][wi-1].get("daily_profits", {}).get(emp, {}).get(iso, 0.0))
-                lab = d.strftime("%a %b %d").replace(" 0", " ")
-                row[lab] = val
-            rows.append(row)
-
-        df_week = pd.DataFrame(rows).set_index("Employee")
-        edited = st.data_editor(df_week, key=f"week_editor_{selected_month}_{wi}", use_container_width=False, width=800, num_rows="fixed")
-        for emp_name in edited.index:
-            for idx, d in enumerate(week_in_month):
-                col_label = edited.columns[idx]
-                try:
-                    new_val = float(edited.loc[emp_name, col_label])
-                except:
-                    new_val = 0.0
-                md["weeks"][wi-1]["daily_profits"].setdefault(emp_name, {})[d.isoformat()] = new_val
+    if rows:
+        df_emps = pd.DataFrame(rows).set_index("Employee")
+        if is_admin:
+            edited = st.data_editor(df_emps[["Plan"]], key=f"emp_plans_editor_{selected_month}", use_container_width=True, num_rows="fixed")
+            for emp_name in edited.index:
+                md.setdefault("employee_plans", {})[emp_name] = float(edited.loc[emp_name, "Plan"])
+        st.markdown("**Current totals**")
+        st.table(df_emps[["Current"]])
+        total_planned = sum(float(x or 0.0) for x in md.get("employee_plans", {}).values())
+        total_current = sum(sum(wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md.get("weeks", []) for emp in md.get("employees", []))
+        st.markdown("---")
+        st.metric("🎯 Month Plan Total", f"${total_planned:,.2f}")
+        st.metric("💰 Month Current Total", f"${total_current:,.2f}")
 
     data[selected_month] = md
     save_data(data)
