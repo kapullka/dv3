@@ -202,15 +202,19 @@ with col_panel:
             st.success(f"Removed {remove_select}")
             st.experimental_rerun()
 
-    # Current totals
-    if md.get("employees"):
-        totals = []
-        for emp in md.get("employees", []):
-            total = sum(sum(int(v) for v in wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md["weeks"])
-            totals.append({"Employee": emp, "Current": total})
-        df_totals = pd.DataFrame(totals).set_index("Employee")
+    # Employee Plans editable
+    rows = []
+    for emp in md.get("employees", []):
+        cur = sum(sum(int(v) for v in wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md["weeks"])
+        plan_val = md.get("employee_plans", {}).get(emp, 0)
+        rows.append({"Employee": emp, "Plan": plan_val, "Current": cur})
+    if rows:
+        df_emps = pd.DataFrame(rows).set_index("Employee")
+        edited = st.data_editor(df_emps[["Plan"]], key=f"emp_plans_editor_{selected_month}", use_container_width=True, num_rows="fixed")
+        for emp_name in edited.index:
+            md.setdefault("employee_plans", {})[emp_name] = int(edited.loc[emp_name, "Plan"])
         st.markdown("**Current totals**")
-        st.table(df_totals)
+        st.table(df_emps[["Current"]])
     else:
         st.info("No employees for this month.")
 
