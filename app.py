@@ -1,4 +1,4 @@
-# app.py — Employee management with weekly sums, colors, compact layout
+# app.py — Employee management with weekly sums, colors, compact layout, black text in weekly totals
 
 import streamlit as st
 import pandas as pd
@@ -176,7 +176,7 @@ with col_panel:
             else:
                 st.error("Invalid admin password!")
 
-# -------------------- Employee Plans + Current totals (fixed width) --------------------
+# -------------------- Employee Plans + Current totals (fixed width, wider) --------------------
 with col_panel:
     rows=[]
     for emp in md.get("employees",[]):
@@ -185,11 +185,11 @@ with col_panel:
         rows.append({"Employee":emp,"Plan":float(plan_val),"Current":int(cur)})
     if rows:
         df_emps=pd.DataFrame(rows).set_index("Employee")
-        edited=st.data_editor(df_emps[["Plan"]], key=f"emp_plan_editor_{selected_month}", use_container_width=False, num_rows="fixed")
+        edited=st.data_editor(df_emps[["Plan"]], key=f"emp_plan_editor_{selected_month}", use_container_width=True, num_rows="fixed")
         for emp_name in edited.index:
             md.setdefault("employee_plans",{})[emp_name]=float(edited.loc[emp_name,"Plan"])
         st.markdown("**Current totals**")
-        st.table(df_emps[["Current"]])
+        st.dataframe(df_emps[["Current"]], use_container_width=True)
 
 # -------------------- Weeks --------------------
 for wi,week_dates in enumerate(expected_weeks,start=1):
@@ -198,7 +198,6 @@ for wi,week_dates in enumerate(expected_weeks,start=1):
         continue
     week_label=f"Week {wi}: {week_in_month[0].strftime('%b %d')} - {week_in_month[-1].strftime('%b %d')}"
     st.subheader(week_label)
-    col_labels=[d.strftime("%a %d").replace(" 0"," ") for d in week_in_month]
 
     if len(md["weeks"])<wi:
         md["weeks"].append({"label":week_label,"daily_profits":{},"total":0.0})
@@ -227,18 +226,17 @@ for wi,week_dates in enumerate(expected_weeks,start=1):
 
     df_week=pd.DataFrame(rows).set_index("Employee")
 
-    # Styling
-    def color_week(val,col_name):
-        if col_name in ["Weekly Plan","Weekly Total"]:
-            return 'background-color: white'
+    # Styling with black text for Weekly Plan/Total
+    def color_week(col):
+        if col in ["Weekly Plan","Weekly Total"]:
+            return ['background-color: white; color: black']*len(df_week)
         else:
-            return 'background-color: #ffe5b4'  # светло-оранжевый
+            return ['background-color: #ffe5b4']*len(df_week)
 
-    styled=df_week.style.apply(lambda x: [color_week(v, x.name) for v in x.index], axis=1)
-    st.dataframe(df_week.style.apply(lambda x: [color_week(x[c],c) for c in x.index], axis=1), use_container_width=False)
+    styled=df_week.style.apply(color_week)
+    st.dataframe(styled, use_container_width=False)
 
     # write back
-    edited=df_week  # inline edit if needed
     for emp_name in df_week.index:
         for idx,d in enumerate(week_in_month):
             col_label=df_week.columns[idx]
