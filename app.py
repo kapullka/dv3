@@ -1,4 +1,4 @@
-# app.py — Employee management with styled UI, fixed panel, Plan editable, Clear Data button
+# app.py — Employee management with styled UI, fixed panel, Plan editable, admin for employees
 
 import streamlit as st
 import pandas as pd
@@ -14,7 +14,7 @@ DATA_FILE = "dispatch_data.json"
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 st.title(APP_TITLE)
 
-# -------------------- Utilities: calendar / keys --------------------
+# -------------------- Utilities --------------------
 def parse_month_key(key: str) -> Tuple[int, int]:
     try:
         dt = datetime.strptime(key, "%B %Y")
@@ -44,7 +44,7 @@ def month_sort_key(k: str, data: Dict[str, Any]) -> Tuple[int, int]:
         return (y, m)
     return parse_month_key(k)
 
-# -------------------- Load & normalize old data --------------------
+# -------------------- Load & normalize data --------------------
 def load_data() -> Dict[str, Any]:
     if os.path.exists(DATA_FILE):
         try:
@@ -57,7 +57,6 @@ def load_data() -> Dict[str, Any]:
         raw = {}
 
     data: Dict[str, Any] = {}
-
     for key, val in raw.items():
         md = dict(val) if isinstance(val, dict) else {}
         if "year" not in md or "month" not in md:
@@ -67,7 +66,6 @@ def load_data() -> Dict[str, Any]:
         md.setdefault("employees", [])
         if "employee_plans" not in md:
             md["employee_plans"] = {e: 0.0 for e in md.get("employees", [])}
-
         expected = weeks_covering_month(md["year"], md["month"])
         old_weeks = md.get("weeks", [])
         new_weeks = []
@@ -86,7 +84,6 @@ def load_data() -> Dict[str, Any]:
                         week_obj["daily_profits"][emp][iso] = 0.0
             new_weeks.append(week_obj)
         md["weeks"] = new_weeks
-
         for emp in md["employees"]:
             md["employee_plans"].setdefault(emp, 0.0)
         data[key] = md
@@ -105,7 +102,7 @@ def save_data(data: Dict[str, Any]):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# -------------------- Core ops: add/remove employee propagation --------------------
+# -------------------- Employee ops --------------------
 def add_employee_to_month_and_future(data: Dict[str, Any], month_key: str, name: str):
     sy, sm = parse_month_key(month_key)
     for k, md in data.items():
@@ -157,11 +154,9 @@ def remove_employee_from_month_and_future(data: Dict[str, Any], month_key: str, 
                     wk["daily_profits"].pop(name, None)
     save_data(data)
 
-# -------------------- Initialize data --------------------
+# -------------------- Initialize --------------------
 data = load_data()
 save_data(data)
-
-# ---------- UI: Top controls (month select + add month) ----------
 month_keys = sorted(list(data.keys()), key=lambda k: month_sort_key(k, data), reverse=True)
 if not month_keys:
     t = date.today()
@@ -170,6 +165,7 @@ if not month_keys:
     month_keys = [key]
     save_data(data)
 
+# ---------- UI: Month select ----------
 col_left, col_right = st.columns([3, 1])
 with col_left:
     selected_month = st.selectbox("Select month", month_keys, index=0)
@@ -193,89 +189,47 @@ with col_right:
                 data[nxt_key]["weeks"].append(wk)
             save_data(data)
             st.success(f"Created new month {nxt_key}")
-            try:
-                st.rerun()
-            except Exception:
-                pass
+            try: st.rerun()
+            except: pass
 
 if selected_month not in data:
     selected_month = month_keys[0]
 md = data[selected_month]
 
-expected_weeks = weeks_covering_month(md["year"], md["month"])
-if len(md.get("weeks", [])) != len(expected_weeks):
-    old = md.get("weeks", [])
-    new_weeks = []
-    for idx, week_dates in enumerate(expected_weeks):
-        label = f"{week_dates[0].strftime('%b %d')} - {week_dates[-1].strftime('%b %d')}"
-        old_w = next((ow for ow in old if isinstance(ow, dict) and ow.get("label") == label), None)
-        wk = {"label": label, "daily_profits": {}, "total": 0.0}
-        for emp in md.get("employees", []):
-            if old_w and "daily_profits" in old_w and emp in old_w["daily_profits"]:
-                wk["daily_profits"][emp] = dict(old_w["daily_profits"][emp])
-            else:
-                wk["daily_profits"][emp] = {d.isoformat(): 0.0 for d in week_dates}
-        new_weeks.append(wk)
-    md["weeks"] = new_weeks
-    data[selected_month] = md
-    save_data(data)
-
 # -------------------- Style --------------------
 st.markdown(
     """
     <style>
-    /* Правая панель */
-    [data-testid="stSidebar"] {
-        background-color: #f0f2f6;
-        padding: 15px;
-        border-radius: 10px;
-    }
-    h1, h2, h3, h4, h5 {
-        font-family: 'Arial', sans-serif;
-    }
-    .dataframe, table {
-        font-family: 'Verdana', sans-serif;
-        font-size: 14px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-    }
-    .stButton>button {
-        background-color: #4CAF50;
-        color: white;
-        border-radius: 5px;
-    }
-    .week-table th {
-        background-color: #f9f9f9;
-    }
-    .week-table tr:nth-child(even) {
-        background-color: #f2f2f2;
-    }
-    .week-table tr:nth-child(odd) {
-        background-color: #ffffff;
-    }
+    [data-testid="stSidebar"] { background-color: #f0f2f6; padding: 15px; border-radius: 10px; }
+    h1, h2, h3, h4, h5 { font-family: 'Arial', sans-serif; }
+    .dataframe, table { font-family: 'Verdana', sans-serif; font-size: 14px; border: 1px solid #ccc; border-radius: 5px; }
+    .stButton>button { background-color: #4CAF50; color: white; border-radius: 5px; }
+    .week-table th { background-color: #f9f9f9; }
+    .week-table tr:nth-child(even) { background-color: #f2f2f2; }
+    .week-table tr:nth-child(odd) { background-color: #ffffff; }
     </style>
     """, unsafe_allow_html=True
 )
 
-# -------------------- Right fixed panel --------------------
+# -------------------- Right panel --------------------
 _, right_col = st.columns([3, 1])
 with right_col:
-    st.markdown("### 👥 Employee Panel")
-    # Add / Remove employee (only visible to admin)
+    st.markdown("### 👥 Employee Panel (admin)")
     with st.form("add_remove_employee_form", clear_on_submit=False):
         new_emp = st.text_input("New employee name")
         add_sub = st.form_submit_button("➕ Add employee")
         remove_select = st.selectbox("Remove employee", options=["(select)"] + md.get("employees", []))
         remove_sub = st.form_submit_button("🗑 Remove selected")
-        # admin check
-        if add_sub and new_emp and new_emp.strip() == "admin123":  # <-- простая проверка, поменяй пароль
+        # Admin password check
+        password = st.text_input("Enter admin password", type="password")
+        if add_sub and new_emp and password == "admin123":
             add_employee_to_month_and_future(data, selected_month, new_emp.strip())
-            st.success(f"Added employee '{new_emp.strip()}' to month {selected_month} and future months.")
+            st.success(f"Added '{new_emp.strip()}' to month {selected_month} and future months.")
             try: st.rerun()
             except: pass
-        if remove_sub and remove_select != "(select)" and new_emp.strip() == "admin123":
+        if remove_sub and remove_select != "(select)" and password == "admin123":
             remove_employee_from_month_and_future(data, selected_month, remove_select)
-            st.success(f"Removed employee '{remove_select}' from {selected_month} and future months.")
+            st.success(f"Removed '{remove_select}' from month {selected_month} and future months.")
             try: st.rerun()
             except: pass
 
@@ -291,33 +245,16 @@ with right_col:
         for emp_name in edited.index:
             try: md.setdefault("employee_plans", {})[emp_name] = float(edited.loc[emp_name, "Plan"])
             except: md.setdefault("employee_plans", {})[emp_name] = 0.0
-        # show Current totals
         st.markdown("**Current totals**")
         st.table(df_emps[["Current"]])
     else:
         st.info("No employees for this month. Add one above.")
 
-    # Month totals
-    total_planned = sum(float(x or 0.0) for x in md.get("employee_plans", {}).values())
-    total_current = sum(sum(float(v or 0.0) for v in wk.get("daily_profits", {}).get(emp, {}).values())
-                        for wk in md.get("weeks", []) for emp in md.get("employees", []))
-    st.markdown("---")
-    st.metric("🎯 Month Plan Total", f"${total_planned:,.2f}")
-    st.metric("💰 Month Current Total", f"${total_current:,.2f}")
-
-    # Clear all data button
-    if st.button("🧹 Clear all data"):
-        if os.path.exists(DATA_FILE):
-            os.remove(DATA_FILE)
-            st.success("All data cleared! Reload the app to start fresh.")
-
 data[selected_month] = md
 save_data(data)
 
-st.markdown("---")
+# -------------------- Main area: weeks --------------------
 st.header(f"📅 {selected_month}")
-
-# -------------------- Main area: weeks horizontal --------------------
 weeks = weeks_covering_month(md["year"], md["month"])
 for wi, week_dates in enumerate(weeks, start=1):
     week_in_month = [d for d in week_dates if d.month == md["month"]]
