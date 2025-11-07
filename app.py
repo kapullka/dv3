@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Tuple
 
 APP_TITLE = "🚚 SunTrans Profit"
 DATA_FILE = "dispatch_data.json"
-ADMIN_PASSWORD = "1234"
+ADMIN_PASSWORD = "your_password_here"  # Поставь свой пароль
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 st.markdown(
@@ -207,19 +207,18 @@ with col_panel:
     for emp in md.get("employees", []):
         cur = sum(sum(float(v) for v in wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md["weeks"])
         plan_val = md.get("employee_plans", {}).get(emp, 0.0)
-        rows.append({"Employee": emp, "Plan": int(plan_val), "Current": int(cur)})
+        rows.append({"Employee": emp, "Plan": float(plan_val), "Current": int(cur)})
     if rows:
         df_emps = pd.DataFrame(rows).set_index("Employee")
         edited = st.data_editor(df_emps[["Plan"]], key=f"emp_plans_editor_{selected_month}", use_container_width=True, num_rows="fixed")
         for emp_name in edited.index:
-            md.setdefault("employee_plans", {})[emp_name] = int(edited.loc[emp_name, "Plan"])
+            md.setdefault("employee_plans", {})[emp_name] = float(edited.loc[emp_name, "Plan"])
         # Current totals
         st.markdown("**Current totals**")
         st.table(df_emps[["Current"]])
     else:
         st.info("No employees for this month.")
 
-# -------------------- Weeks Tables --------------------
 with col_weeks:
     for wi, week_dates in enumerate(weeks_covering_month(md["year"], md["month"]), start=1):
         week_in_month = [d for d in week_dates if d.month == md["month"]]
@@ -228,48 +227,33 @@ with col_weeks:
         week_label = f"Week {wi}: {week_in_month[0].strftime('%b %d')} - {week_in_month[-1].strftime('%b %d')}"
         st.subheader(week_label)
 
-        # Build week DataFrame with Weekly Plan & Total at the end
+        # Build week DataFrame
         rows = []
         for emp in md.get("employees", []):
             row = {}
+            row["Weekly Plan"] = round(md["employee_plans"].get(emp, 0.0)/len(week_in_month)*len(week_dates),1)
+            total_week = sum(md["weeks"][wi-1]["daily_profits"].get(emp, {}).get(d.isoformat(),0.0) for d in week_in_month)
+            row["Weekly Total"] = total_week
             for d in week_in_month:
-                row[d.strftime("%a %d")] = int(md["weeks"][wi-1]["daily_profits"][emp][d.isoformat()])
-            weekly_total = sum(md["weeks"][wi-1]["daily_profits"][emp][d.isoformat()] for d in week_in_month)
-            weekly_plan = round(md["employee_plans"].get(emp, 0.0) / len(week_dates) * len(week_in_month))
-            row["Weekly Plan"] = int(weekly_plan)
-            row["Weekly Total"] = int(weekly_total)
+                row[d.strftime("%a %d")] = md["weeks"][wi-1]["daily_profits"][emp][d.isoformat()]
             rows.append(row)
-
         if not rows:
             st.info("No employees configured.")
             continue
-
         df_week = pd.DataFrame(rows, index=md.get("employees"))
 
-        # Editable table
-        edited_week = st.data_editor(
-            df_week.drop(columns=["Weekly Total"]),  # не редактируемо Weekly Total
-            key=f"week_editor_{selected_month}_{wi}",
-            use_container_width=True,
-            num_rows="fixed"
-        )
+        # Style table
+        def style_week(df):
+            def color_cell(val, col):
+                if col in ["Weekly Plan","Weekly Total"]:
+                    return 'background-color: white; color: black; font-weight:bold; border:1px solid black'
+                else:
+                    return 'background-color: #ffe5b4; color: black; border:1px solid black'
+            return df.style.apply(lambda x: [color_cell(v, x.name) for v in x.index], axis=1)
 
-        # Сохраняем изменения обратно в data
-        for emp_name in edited_week.index:
-            for col in week_in_month:
-                col_str = col.strftime("%a %d")
-                if col_str in edited_week.columns:
-                    md["weeks"][wi-1]["daily_profits"][emp_name][col.isoformat()] = int(edited_week.loc[emp_name, col_str])
+        # Display styled table
+        st.write(df_week.style.set_properties(**{'border':'1px solid black', 'text-align':'center'}))
 
-
-        # Styling
-        def color_cell(val, col):
-            if col in ["Weekly Plan", "Weekly Total"]:
-                return 'background-color: white; color: black; font-weight:bold; border:1px solid black'
-            else:
-                return 'background-color: #ffe5b4; color: black; border:1px solid black'
-
-        styled = df_week.style.apply(lambda x: [color_cell(v, x.name) for v in x], axis=1)\
-                              .set_properties(**{'border':'1px solid black', 'text-align':'center', 'font-family':'Arial', 'font-size':'14px', 'min-width':'90px'})
-
-        st.dataframe(styled, use_container_width=False)
+        # Write back edited values
+        # (можно через st.data_editor, если нужно интерактивно)
+        # currently read-only, редактируем только в Daily profits через предыдущий код
