@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Tuple
 
 APP_TITLE = "🚚 SunTrans Profit"
 DATA_FILE = "dispatch_data.json"
-ADMIN_PASSWORD = "1234"  # Поставь свой пароль
+ADMIN_PASSWORD = "your_password_here"  # Поставь свой пароль
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 st.markdown(
@@ -75,7 +75,7 @@ def load_data() -> Dict[str, Any]:
         md.setdefault("month", m)
         md.setdefault("employees", [])
         if "employee_plans" not in md:
-            md["employee_plans"] = {e: 0.0 for e in md.get("employees", [])}
+            md["employee_plans"] = {e: 0 for e in md.get("employees", [])}
         # weeks rebuild
         expected = weeks_covering_month(md["year"], md["month"])
         old_weeks = md.get("weeks", [])
@@ -84,19 +84,19 @@ def load_data() -> Dict[str, Any]:
             start, end = week_dates[0], week_dates[-1]
             label = f"{start.strftime('%b %d')} - {end.strftime('%b %d')}"
             old_week = next((ow for ow in old_weeks if ow.get("label") == label), None)
-            wk_obj = {"label": label, "daily_profits": {}, "total": 0.0}
+            wk_obj = {"label": label, "daily_profits": {}, "total": 0}
             for emp in md.get("employees", []):
                 wk_obj["daily_profits"].setdefault(emp, {})
                 for d in week_dates:
                     iso = d.isoformat()
-                    val = 0.0
+                    val = 0
                     if old_week and emp in old_week.get("daily_profits", {}):
-                        val = float(old_week["daily_profits"][emp].get(iso, 0.0) or 0.0)
+                        val = int(old_week["daily_profits"][emp].get(iso, 0) or 0)
                     wk_obj["daily_profits"][emp][iso] = val
             new_weeks.append(wk_obj)
         md["weeks"] = new_weeks
         for emp in md["employees"]:
-            md["employee_plans"].setdefault(emp, 0.0)
+            md["employee_plans"].setdefault(emp, 0)
         data[key] = md
 
     if not data:
@@ -105,7 +105,7 @@ def load_data() -> Dict[str, Any]:
         data[key] = {"year": t.year, "month": t.month, "employees": [], "employee_plans": {}, "weeks": []}
         for week_dates in weeks_covering_month(t.year, t.month):
             label = f"{week_dates[0].strftime('%b %d')} - {week_dates[-1].strftime('%b %d')}"
-            data[key]["weeks"].append({"label": label, "daily_profits": {}, "total": 0.0})
+            data[key]["weeks"].append({"label": label, "daily_profits": {}, "total": 0})
     return data
 
 def save_data(data: Dict[str, Any]):
@@ -120,7 +120,7 @@ def add_employee_to_month_and_future(data: Dict[str, Any], month_key: str, name:
         if (y, m) >= (sy, sm):
             if name not in md["employees"]:
                 md["employees"].append(name)
-                md.setdefault("employee_plans", {})[name] = 0.0
+                md.setdefault("employee_plans", {})[name] = 0
                 expected_weeks = weeks_covering_month(md["year"], md["month"])
                 for idx, wk in enumerate(md.get("weeks", [])):
                     week_dates = expected_weeks[idx]
@@ -202,19 +202,15 @@ with col_panel:
             st.success(f"Removed {remove_select}")
             st.experimental_rerun()
 
-    # Employee Plans editable for all
-    rows = []
-    for emp in md.get("employees", []):
-        cur = sum(sum(int(v) for v in wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md["weeks"])
-        plan_val = md.get("employee_plans", {}).get(emp, 0)
-        rows.append({"Employee": emp, "Plan": int(plan_val), "Current": int(cur)})
-    if rows:
-        df_emps = pd.DataFrame(rows).set_index("Employee")
-        edited = st.data_editor(df_emps[["Plan"]], key=f"emp_plans_editor_{selected_month}", use_container_width=True, num_rows="fixed")
-        for emp_name in edited.index:
-            md.setdefault("employee_plans", {})[emp_name] = int(edited.loc[emp_name, "Plan"])
+    # Current totals
+    if md.get("employees"):
+        totals = []
+        for emp in md.get("employees", []):
+            total = sum(sum(int(v) for v in wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md["weeks"])
+            totals.append({"Employee": emp, "Current": total})
+        df_totals = pd.DataFrame(totals).set_index("Employee")
         st.markdown("**Current totals**")
-        st.table(df_emps[["Current"]])
+        st.table(df_totals)
     else:
         st.info("No employees for this month.")
 
@@ -231,9 +227,8 @@ with col_weeks:
         rows = []
         for emp in md.get("employees", []):
             row = {}
-            row["Weekly Plan"] = int(round(md["employee_plans"].get(emp, 0)/len(week_in_month)*len(week_dates)))
             total_week = sum(md["weeks"][wi-1]["daily_profits"].get(emp, {}).get(d.isoformat(),0) for d in week_in_month)
-            row["Weekly Total"] = int(round(total_week))
+            row["Weekly Total"] = total_week
             for d in week_in_month:
                 row[d.strftime("%a %d")] = int(md["weeks"][wi-1]["daily_profits"][emp][d.isoformat()])
             rows.append(row)
@@ -245,8 +240,9 @@ with col_weeks:
         df_week = pd.DataFrame(rows, index=md.get("employees"))
 
         # Editable table excluding Weekly Total
+        editable_cols = [c for c in df_week.columns if c != "Weekly Total"]
         edited_week = st.data_editor(
-            df_week.drop(columns=["Weekly Total"]),
+            df_week[editable_cols],
             key=f"week_editor_{selected_month}_{wi}",
             use_container_width=True,
             num_rows="fixed"
