@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Tuple
 
 APP_TITLE = "🚚 SunTrans Profit"
 DATA_FILE = "dispatch_data.json"
-ADMIN_PASSWORD = "your_password_here"
+ADMIN_PASSWORD = "your_password_here"  # Поставь свой пароль
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 st.markdown(
@@ -207,12 +207,12 @@ with col_panel:
     for emp in md.get("employees", []):
         cur = sum(sum(float(v) for v in wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md["weeks"])
         plan_val = md.get("employee_plans", {}).get(emp, 0.0)
-        rows.append({"Employee": emp, "Plan": int(plan_val), "Current": int(cur)})
+        rows.append({"Employee": emp, "Plan": float(plan_val), "Current": int(cur)})
     if rows:
         df_emps = pd.DataFrame(rows).set_index("Employee")
         edited = st.data_editor(df_emps[["Plan"]], key=f"emp_plans_editor_{selected_month}", use_container_width=True, num_rows="fixed")
         for emp_name in edited.index:
-            md.setdefault("employee_plans", {})[emp_name] = int(edited.loc[emp_name, "Plan"])
+            md.setdefault("employee_plans", {})[emp_name] = float(edited.loc[emp_name, "Plan"])
         # Current totals
         st.markdown("**Current totals**")
         st.table(df_emps[["Current"]])
@@ -228,6 +228,13 @@ with col_weeks:
         week_label = f"Week {wi}: {week_in_month[0].strftime('%b %d')} - {week_in_month[-1].strftime('%b %d')}"
         st.subheader(week_label)
 
+        # Рабочие дни: Пн-Пт
+        def workdays(dates: List[date]):
+            return [d for d in dates if d.weekday() < 5]
+
+        monthly_workdays = workdays([d for wk in weeks_covering_month(md["year"], md["month"]) for d in wk])
+        weekly_workdays = workdays(week_in_month)
+
         # Build week DataFrame with Weekly Plan & Total at the end
         rows = []
         for emp in md.get("employees", []):
@@ -235,7 +242,9 @@ with col_weeks:
             for d in week_in_month:
                 row[d.strftime("%a %d")] = int(md["weeks"][wi-1]["daily_profits"][emp][d.isoformat()])
             weekly_total = sum(md["weeks"][wi-1]["daily_profits"][emp][d.isoformat()] for d in week_in_month)
-            weekly_plan = round(md["employee_plans"].get(emp, 0.0) / len(week_dates) * len(week_in_month))
+
+            monthly_plan = md["employee_plans"].get(emp, 0.0)
+            weekly_plan = round((monthly_plan / len(monthly_workdays)) * len(weekly_workdays))
             row["Weekly Plan"] = int(weekly_plan)
             row["Weekly Total"] = int(weekly_total)
             rows.append(row)
@@ -254,6 +263,12 @@ with col_weeks:
                 return 'background-color: #ffe5b4; color: black; border:1px solid black'
 
         styled = df_week.style.apply(lambda x: [color_cell(v, x.name) for v in x], axis=1)\
-                              .set_properties(**{'border':'1px solid black', 'text-align':'center', 'font-family':'Arial', 'font-size':'14px', 'min-width':'90px'})
+                              .set_properties(**{
+                                  'border':'1px solid black', 
+                                  'text-align':'center', 
+                                  'font-family':'Arial', 
+                                  'font-size':'14px',
+                                  'min-width': f'{100 + len(md.get("employees"))*90}px'
+                              })
 
         st.dataframe(styled, use_container_width=False)
