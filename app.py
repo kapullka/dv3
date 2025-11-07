@@ -169,7 +169,7 @@ with col_main:
     selected_month = st.selectbox("Select month", month_keys, index=0)
 md = data[selected_month]
 
-# -------------------- Right Employee Panel (Admin only) --------------------
+# -------------------- Right Employee Panel + Plans --------------------
 with col_right:
     st.markdown("### 👥 Employee Panel")
     pw_input = st.text_input("Admin Password", type="password")
@@ -189,19 +189,21 @@ with col_right:
                 st.success(f"Removed '{remove_select}' from month {selected_month} and future months")
                 st.experimental_rerun()
 
-# -------------------- Plans Table (Everyone can edit) --------------------
-rows = []
-for emp in md.get("employees", []):
-    cur = sum(sum(float(v or 0.0) for v in wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md.get("weeks", []))
-    plan_val = md.get("employee_plans", {}).get(emp, 0.0)
-    rows.append({"Employee": emp, "Plan": float(plan_val), "Current": float(cur)})
-if rows:
-    df_emps = pd.DataFrame(rows).set_index("Employee")
-    edited = st.data_editor(df_emps[["Plan"]], key=f"emp_plans_editor_{selected_month}", use_container_width=True, num_rows="fixed")
-    for emp_name in edited.index:
-        md.setdefault("employee_plans", {})[emp_name] = float(edited.loc[emp_name, "Plan"])
-    st.markdown("**Current totals**")
-    st.table(df_emps[["Current"]])
+    # Plans (Everyone can edit)
+    st.markdown("### 📊 Plans")
+    rows = []
+    for emp in md.get("employees", []):
+        cur = sum(sum(float(v or 0.0) for v in wk.get("daily_profits", {}).get(emp, {}).values()) for wk in md.get("weeks", []))
+        plan_val = md.get("employee_plans", {}).get(emp, 0.0)
+        rows.append({"Employee": emp, "Plan": float(plan_val), "Current": float(cur)})
+    if rows:
+        df_emps = pd.DataFrame(rows).set_index("Employee")
+        edited = st.data_editor(df_emps[["Plan"]], key=f"emp_plans_editor_{selected_month}", use_container_width=True, num_rows="fixed")
+        for emp_name in edited.index:
+            md.setdefault("employee_plans", {})[emp_name] = float(edited.loc[emp_name, "Plan"])
+        # Current totals
+        st.markdown("**Current totals**")
+        st.table(df_emps[["Current"]])
 
 # -------------------- Weeks Table --------------------
 st.markdown("---")
