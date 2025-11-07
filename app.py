@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Tuple
 
 APP_TITLE = "🚚 SunTrans Profit"
 DATA_FILE = "dispatch_data.json"
-ADMIN_PASSWORD = "your_password_here"  # Поставь свой пароль
+ADMIN_PASSWORD = "your_password_here"
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 st.markdown(
@@ -254,6 +254,6 @@ with col_weeks:
                 return 'background-color: #ffe5b4; color: black; border:1px solid black'
 
         styled = df_week.style.apply(lambda x: [color_cell(v, x.name) for v in x], axis=1)\
-                              .set_properties(**{'border':'1px solid black', 'text-align':'center', 'font-family':'Arial', 'font-size':'14px'})
+                              .set_properties(**{'border':'1px solid black', 'text-align':'center', 'font-family':'Arial', 'font-size':'14px', 'min-width':'90px'})
 
         st.dataframe(styled, use_container_width=False)
