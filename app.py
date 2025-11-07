@@ -246,6 +246,22 @@ with col_weeks:
 
         df_week = pd.DataFrame(rows, index=md.get("employees"))
 
+        # Editable table
+        edited_week = st.data_editor(
+            df_week.drop(columns=["Weekly Total"]),  # не редактируемо Weekly Total
+            key=f"week_editor_{selected_month}_{wi}",
+            use_container_width=True,
+            num_rows="fixed"
+        )
+
+        # Сохраняем изменения обратно в data
+        for emp_name in edited_week.index:
+            for col in week_in_month:
+                col_str = col.strftime("%a %d")
+                if col_str in edited_week.columns:
+                    md["weeks"][wi-1]["daily_profits"][emp_name][col.isoformat()] = int(edited_week.loc[emp_name, col_str])
+
+
         # Styling
         def color_cell(val, col):
             if col in ["Weekly Plan", "Weekly Total"]:
