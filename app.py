@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Tuple
 
 APP_TITLE = "🚚 SunTrans Profit"
 DATA_FILE = "dispatch_data.json"
-ADMIN_PASSWORD = "your_password_here"  # Поставь свой пароль
+ADMIN_PASSWORD = "1234"  # Поставь свой пароль
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 st.markdown(
